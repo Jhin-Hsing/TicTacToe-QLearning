@@ -128,7 +128,9 @@ AI 在訓練過程中並非每次都選最高分的動作，而是採用 **$\eps
 ### 3.3 學習公式 (Q-Learning Update)
 每當 AI 下了一步棋並得到結果後，會依據以下公式更新 Q-Table 中對應的值：
 
-$$Q(S, A) \leftarrow Q(S, A) + \alpha [ R + \gamma \max_{a'} Q(S', a') - Q(S, A) ]$$
+$$
+Q(S, A) \leftarrow Q(S, A) + \alpha [ R + \gamma \max_{a'} Q(S', a') - Q(S, A) ]
+$$
 
 **參數詳細說明：**
 *   $Q(S, A)$：目前對這個動作的分數估計。
