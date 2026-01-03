@@ -72,6 +72,8 @@ venv.bak/
 # (Optional) 如果您希望保留訓練好的模型在 Repo 裡，就把下面這兩行解開註解
 models/
 output/
+!output/td0_learning_curves.png
+
 
 # Temporary files
 tmp/
