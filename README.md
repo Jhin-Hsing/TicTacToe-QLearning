@@ -283,7 +283,8 @@ def train_self_play(self, agent, num_episodes):
 
 ## 7. 專案存取與使用說明
 
-**[GitHub 專案連結：TicTacToe-QLearning](https://github.com/Jhin-Hsing/TicTacToe-QLearning.git)**
+本專題之所有程式碼有上傳到 GitHub，可以在此網址查看：
+https://github.com/Jhin-Hsing/TicTacToe-QLearning.git
 
 ### 7.1 環境準備
 確保已安裝 Python 3.10+，並安裝必要套件：
