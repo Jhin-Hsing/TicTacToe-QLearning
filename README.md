@@ -206,9 +206,55 @@ graph TD
 *   **對手**：隨機機器人。
 *   **目的**：快速讓 AI 學會「連成一線」的獲勝方式與基本遊戲規則。
 
+**詳細程式碼：隨機對弈訓練循環 (training/train.py)**
+
+```python
+    def train(self, agent, opponent, num_episodes=20000):
+        for episode in range(num_episodes):
+            state = self.env.reset()
+            done = False
+            while not done:
+                if self.env.current_player == 1:  # AI 回合
+                    action = agent.choose_action(state, legal_actions)
+                    next_state, reward, done, info = self.env.step(action)
+                    
+                    if not done: # 對手 (隨機) 回合
+                        opp_action = opponent.choose_action(opp_legal)
+                        next_state, _, done, info = self.env.step(opp_action)
+                        if done and info['winner'] == -1: reward = -1.0 # AI 輸了
+                    
+                    # 更新 Q-Table
+                    agent.update(state, action, reward, next_state, next_legal, done)
+                    state = next_state
+```
+
 ### 4.2 第二階段：進階訓練 (20,000 ~ 100,000 場)
 *   **對手**：AI 自己 (Self-Play)。
 *   **目的**：學習防守。當對手變強（變回自己），若不阻擋對方的連線就會輸掉，這強迫 AI 修補策略漏洞。在此階段重置探索率，有助於開發新的防守思維。
+
+**詳細程式碼：兩階段訓練與自我對弈編排 (training/train.py)**
+
+```python
+def train_agent(agent_class, num_episodes=100000):
+    # 階段 1：隨機對弈 (20%) - 學習基礎規則
+    trainer.train(agent, RandomPlayer(), int(num_episodes * 0.2))
+
+    # 階段 2：自我對弈 (80%) - 學習高階防守與佈局
+    # 重置探索率，確保在自我對弈時能重新探索防守策略
+    agent.epsilon = 0.6 
+    trainer.train_self_play(agent, int(num_episodes * 0.8))
+
+def train_self_play(self, agent, num_episodes):
+    """自我對弈核心邏輯：AI 同時擔任玩家與對手，互相學習"""
+    for episode in range(num_episodes):
+        # ... 遊戲過程中，不論是 X 還是 O 的回合，都呼叫同一個 agent ...
+        action = agent.choose_action(state, legal_actions)
+        next_state, reward, done, info = self.env.step(action)
+        
+        # 遊戲結束後，根據輸贏分別更新 X 與 O 視角的 Q 值
+        agent.update(s_x, a_x, r_x, next_state, [], True) # 更新 X 的步數
+        agent.update(s_o, a_o, r_o, next_state, [], True) # 更新 O 的步數
+```
 
 ## 5. 實驗結果與圖表分析
 
@@ -235,9 +281,11 @@ graph TD
 2.  **自我對弈是關鍵**：單靠隨機對手訓練無法讓 AI 學會防守，自我對弈是提升強度的關鍵。
 3.  **訓練成果**：最終訓練出的 AI 能夠穩定擊敗弱對手，並在面對強大對手（包括人類玩家）時保持高度的不敗率。
 
-## 7. 使用說明
+## 7. 專案存取與使用說明
 
-### 7.1 環境準備 (僅腳本執行與訓練需要)
+**[GitHub 專案連結：TicTacToe-QLearning](https://github.com/Jhin-Hsing/TicTacToe-QLearning.git)**
+
+### 7.1 環境準備
 確保已安裝 Python 3.10+，並安裝必要套件：
 ```bash
 pip install -r requirements.txt
