@@ -23,6 +23,42 @@
     *   **輸了**：得 **-1 分**（給予懲罰，讓 AI 記住不要再導致這種局面）。
     *   **平手或還沒結束**：得 **0 分**（鼓勵儘速獲獲勝，不給予額外中間獎勵）。
 
+**詳細程式碼：環境定義 (tictactoe.py)**
+
+```python
+class TicTacToe:
+    def __init__(self):
+        """初始化遊戲環境"""
+        self.board = np.zeros((3, 3), dtype=int)
+        self.current_player = 1  # 1 代表 X (AI), -1 代表 O (對手)
+        self.done = False
+        self.winner = None
+
+    def step(self, action: Tuple[int, int]) -> Tuple[np.ndarray, float, bool, dict]:
+        """執行一個動作並回傳結果"""
+        row, col = action
+        
+        # 執行動作
+        self.board[row, col] = self.current_player
+        
+        # 檢查勝負
+        winner = self._check_winner()
+        if winner is not None:
+            self.done = True
+            # 從當前玩家的角度給予獎勵
+            if winner == self.current_player:
+                reward = 1.0  # 贏了
+            elif winner == -self.current_player:
+                reward = -1.0  # 輸了
+            else:
+                reward = 0.0  # 平局
+        else:
+            reward = 0.0
+            self.current_player = -self.current_player # 切換玩家
+            
+        return self.board.copy(), reward, self.done, {}
+```
+
 ## 3. 演算法說明
 
 本專題使用的演算法是 **Q-Learning**，這是一種 Off-policy 的時序差分控制演算法。
@@ -56,6 +92,39 @@ AI 在訓練過程中並非每次都選最高分的動作，而是採用 **$\eps
 
 隨著訓練次數增加，$\epsilon$ 會逐漸變小（Decay），代表 AI 漸趨成熟，開始更多地依賴經驗。
 
+**詳細程式碼：ε-Greedy 動作選擇 (qlearning_agent.py)**
+
+```python
+    def choose_action(
+        self,
+        state: np.ndarray,
+        legal_actions: List[Tuple[int, int]]
+    ) -> Tuple[int, int]:
+        """
+        使用 ε-greedy 策略選擇動作
+        """
+        if not legal_actions:
+            raise ValueError("沒有合法動作可選擇")
+
+        # 探索：隨機選擇
+        if np.random.random() < self.epsilon:
+            idx = np.random.randint(len(legal_actions))
+            return legal_actions[idx]
+
+        # 利用：選擇 Q 值最高的動作
+        state_key = self.get_state_key(state)
+        best_action = legal_actions[0]
+        best_q = self.Q[(state_key, legal_actions[0])]
+
+        for action in legal_actions[1:]:
+            q = self.Q[(state_key, action)]
+            if q > best_q:
+                best_q = q
+                best_action = action
+
+        return best_action
+```
+
 ### 3.3 學習公式 (Q-Learning Update)
 每當 AI 下了一步棋並得到結果後，會依據以下公式更新 Q-Table 中對應的值：
 
@@ -67,6 +136,38 @@ $$Q(S, A) \leftarrow Q(S, A) + \alpha [ R + \gamma \max_{a'} Q(S', a') - Q(S, A)
 *   $\max_{a'} Q(S', a')$：找出下一個狀態 $S'$ 中所有可能動作的最佳分數，讓 AI 具有遠見。
 *   $\alpha$ (學習率, 0.1)：決定吸收新經驗的速度。
 *   $\gamma$ (折扣因子, 0.99)：決定對未來獎勵的重視程度。
+
+**詳細程式碼：Q-Learning 更新 (qlearning_agent.py)**
+
+```python
+    def update(
+        self,
+        state: np.ndarray,
+        action: Tuple[int, int],
+        reward: float,
+        next_state: np.ndarray,
+        next_legal_actions: List[Tuple[int, int]],
+        done: bool
+    ):
+        """
+        Q-Learning 更新規則
+        Q(s,a) ← Q(s,a) + α * [r + γ * max_a' Q(s',a') - Q(s,a)]
+        """
+        state_key = self.get_state_key(state)
+        current_q = self.Q[(state_key, action)]
+
+        if done:
+            # 終止狀態，沒有未來獎勵
+            td_target = reward
+        else:
+            # 找出下一步所有動作中 Q 值最大者 (Off-policy)
+            max_next_q = self.get_max_q_value(next_state, next_legal_actions)
+            td_target = reward + self.gamma * max_next_q
+
+        # 計算 TD Error 並更新
+        td_error = td_target - current_q
+        self.Q[(state_key, action)] += self.alpha * td_error
+```
 
 ## 4. 訓練流程
 
@@ -134,27 +235,20 @@ graph TD
 2.  **自我對弈是關鍵**：單靠隨機對手訓練無法讓 AI 學會防守，自我對弈是提升強度的關鍵。
 3.  **訓練成果**：最終訓練出的 AI 能夠穩定擊敗弱對手，並在面對強大對手（包括人類玩家）時保持高度的不敗率。
 
-## 7. 實作說明與參考文獻
-本專題之程式碼由作者基於 Python 語言自行開發。環境設計參考了 OpenAI Gym 之標準介面規範；演算法實作則依據 Sutton & Barto 之強化學習理論，將 Q-Learning 演算法應用於井字棋賽局，並自行設計兩階段訓練流程。
+## 7. 使用說明
 
-**參考文獻：**
-1.  Sutton, R. S., & Barto, A. G. (2018). *Reinforcement Learning: An Introduction* (2nd ed.). MIT Press.
-2.  Watkins, C. J. C. H., & Dayan, P. (1992). *Q-learning*. Machine Learning, 8(3), 279-292.
-
-## 8. 使用說明
-
-### 8.1 環境準備 (僅腳本執行與訓練需要)
+### 7.1 環境準備 (僅腳本執行與訓練需要)
 確保已安裝 Python 3.10+，並安裝必要套件：
 ```bash
 pip install -r requirements.txt
 ```
 *註：若僅執行 `dist/TicTacToe_AI.exe` 則不須安裝任何環境。*
 
-### 8.2 執行遊戲
+### 7.2 執行遊戲
 *   **直接執行 (推薦)**：雙擊 `dist/TicTacToe_AI.exe` 即可開始與 AI 對戰。
 *   **腳本執行**：於終端機輸入 `python play_game.py`。
 
-### 8.3 訓練 AI (可選)
+### 7.3 訓練 AI (可選)
 若欲從零開始訓練模型，請於終端機輸入：
 ```bash
 python main.py --mode train --episodes 100000
