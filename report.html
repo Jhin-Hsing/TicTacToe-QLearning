@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>強化學習期末專題報告</title>
+    
+    <!-- CSS Styles -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.2.0/github-markdown-light.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
+    
+    <style>
+        body {
+            box-sizing: border-box;
+            min-width: 200px;
+            max-width: 980px;
+            margin: 0 auto;
+            padding: 45px;
+            background-color: white;
+            /* 統一字體：英文使用 Times New Roman，中文使用微軟正黑體 */
+            font-family: "Times New Roman", "Microsoft JhengHei", serif;
+        }
+
+        @media (max-width: 767px) {
+            body { padding: 15px; }
+        }
+
+        /* Print Optimization */
+        @media print {
+            body {
+                padding: 0;
+                margin: 0;
+                max-width: 100%;
+            }
+            .markdown-body {
+                font-size: 11pt;
+            }
+            pre, blockquote, table, img {
+                page-break-inside: avoid;
+            }
+            h1, h2, h3 {
+                page-break-after: avoid;
+            }
+        }
+
+        .img-container {
+            text-align: center;
+            margin: 20px 0;
+        }
+        
+        .img-container img {
+            max-width: 50%;
+            height: auto;
+            border: 1px solid #eee;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        .tilde {
+            margin: 0 5px;
+            font-weight: bold;
+        }
+        
+        /* 公式置中容器 */
+        .math-display {
+            text-align: center;
+            margin: 1em 0;
+            overflow-x: auto;
+        }
+
+        /* 確保程式碼區塊保留等寬字體 */
+        code, pre {
+            font-family: "Consolas", "Monaco", "Courier New", monospace !important;
+        }
+        
+        /* 強制緊湊化代碼區塊排版 */
+        .markdown-body pre {
+            line-height: 1.1 !important;
+            padding: 10px !important;
+            margin: 10px 0 !important;
+            background-color: #f6f8fa !important;
+        }
+
+        .markdown-body pre code {
+            line-height: 1.1 !important;
+            padding: 0 !important;
+        }
+    </style>
+
+    <!-- MathJax for Complex LaTeX Formulas -->
+    <script>
+        MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\(', '\)']],
+                displayMath: [['$$', '$$'], ['\[', '\]']]
+            },
+            svg: {
+                fontCache: 'global'
+            }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+</head>
+<body class="markdown-body">
+
+    <h1>強化學習期末專題報告：基於 Q-Learning 演算法之井字棋 AI 實作</h1>
+
+    <h2>1. 專題摘要</h2>
+    <p>本專題使用強化學習（Reinforcement Learning）中的 <strong>Q-Learning</strong> 演算法，訓練一個能夠自動學會玩井字棋（Tic-Tac-Toe）的 AI。本研究設計了一個「兩階段」的訓練流程：首先讓 AI 跟隨機亂下的對手練習，學會基本的連線規則；接著讓 AI 跟自己對打（自我對弈），學會防守與阻擋。經過 <strong>100,000 次</strong> 的訓練後，AI 從一開始的隨機落子，進化成一個會防守且難以被擊敗的高手，最終在對抗隨機對手時達到 96.9% 的勝率。</p>
+
+    <h2>2. 遊戲規則與環境定義</h2>
+
+    <h3>2.1 井字棋規則</h3>
+    <p>井字棋是一個雙人遊戲，雙方分別代表 <strong>O</strong> 與 <strong>X</strong>，輪流在 3 &times; 3 的格子中填入符號。</p>
+    <ul>
+        <li><strong>獲勝條件</strong>：最先將自己的三個符號連成一線（橫、直、對角線）的一方獲勝。</li>
+        <li><strong>平局條件</strong>：若棋盤填滿了但沒有人連成一線，則為平局。</li>
+    </ul>
+
+    <h3>2.2 強化學習環境設置</h3>
+    <p>為了讓 AI 能夠理解這個遊戲，本專題定義了以下三個要素：</p>
+
+    <ol>
+        <li><strong>狀態 (State)</strong>：目前的棋盤盤面。
+            <ul>
+                <li>實作細節：將 3 &times; 3 的二維陣列（0=空, 1=X, -1=O）扁平化為一維陣列，再轉換成字串作為 Q-Table 的索引鍵（Key）。</li>
+                <li>例如：盤面中間有一個 X &rightarrow; 狀態表示為 <code>'[0, 0, 0, 0, 1, 0, 0, 0, 0]'</code>。</li>
+            </ul>
+        </li>
+        <li><strong>動作 (Action)</strong>：AI 可以下在哪裡。
+            <ul>
+                <li>也就是棋盤上所有還沒被填滿的「空格」座標（例如：<code>(1, 1)</code> 代表中間）。</li>
+            </ul>
+        </li>
+        <li><strong>獎勵 (Reward)</strong>：用來告訴 AI 剛剛做得好不好。
+            <ul>
+                <li>贏了：得 <strong>+1 分</strong>。</li>
+                <li>輸了：得 <strong>-1 分</strong>。</li>
+                <li>平手或還沒結束：得 <strong>0 分</strong>。</li>
+            </ul>
+        </li>
+    </ol>
+
+    <p><strong>詳細程式碼：環境定義 (tictactoe.py)</strong></p>
+<pre><code class="language-python">class TicTacToe:
+    def __init__(self):
+        """初始化遊戲環境"""
+        self.board = np.zeros((3, 3), dtype=int)
+        self.current_player = 1  # 1 代表 X (AI), -1 代表 O (對手)
+        self.done = False
+        self.winner = None
+
+    def step(self, action: Tuple[int, int]) -> Tuple[np.ndarray, float, bool, dict]:
+        """執行一個動作並回傳結果"""
+        row, col = action
+        
+        # 執行動作
+        self.board[row, col] = self.current_player
+        
+        # 檢查勝負
+        winner = self._check_winner()
+        if winner is not None:
+            self.done = True
+            # 從當前玩家的角度給予獎勵
+            if winner == self.current_player:
+                reward = 1.0  # 贏了
+            elif winner == -self.current_player:
+                reward = -1.0  # 輸了
+            else:
+                reward = 0.0  # 平局
+        else:
+            reward = 0.0
+            self.current_player = -self.current_player # 切換玩家
+            
+        return self.board.copy(), reward, self.done, {}
+</code></pre>
+
+    <h2>3. 演算法說明</h2>
+    <p>本專題使用的演算法是 <strong>Q-Learning</strong>，這是一種 Off-policy 的時序差分控制演算法。</p>
+
+    <h3>3.1 Q-Table 定義與格式</h3>
+    <p>Q-Table 是一個查找表（Look-up Table），用來儲存每一個「狀態-動作對 (State-Action Pair)」的價值。</p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>動作位置 (Action)</th>
+                <th>(0,0) 左上</th>
+                <th>(0,1) 中上</th>
+                <th>...</th>
+                <th>(1,1) 中間</th>
+                <th>...</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><strong>Q 值 (預期分數)</strong></td>
+                <td>0.2</td>
+                <td>0.1</td>
+                <td>...</td>
+                <td><strong>0.5</strong></td>
+                <td>...</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h3>3.2 動作選擇策略 (&epsilon;-Greedy)</h3>
+    <p>AI 在訓練過程中並非每次都選最高分的動作，而是採用 <strong>&epsilon;-Greedy</strong> 策略來平衡「探索 (Exploration)」與「利用 (Exploitation)」。</p>
+    <p>隨著訓練次數增加，&epsilon; 會逐漸變小（Decay），代表 AI 漸趨成熟，開始更多地依賴經驗。</p>
+
+    <p><strong>詳細程式碼：&epsilon;-Greedy 動作選擇 (qlearning_agent.py)</strong></p>
+<pre><code class="language-python">    def choose_action(self, state, legal_actions):
+        # 探索：隨機選擇
+        if np.random.random() < self.epsilon:
+            idx = np.random.randint(len(legal_actions))
+            return legal_actions[idx]
+
+        # 利用：選擇 Q 值最高的動作
+        state_key = self.get_state_key(state)
+        best_action = legal_actions[0]
+        best_q = self.Q[(state_key, legal_actions[0])]
+
+        for action in legal_actions[1:]:
+            q = self.Q[(state_key, action)]
+            if q > best_q:
+                best_q = q
+                best_action = action
+        return best_action</code></pre>
+
+    <h3>3.3 學習公式 (Q-Learning Update)</h3>
+    <p>每當 AI 下了一步棋並得到結果後，會依據以下公式更新 Q-Table 中對應的值：</p>
+
+    <div class="math-display">
+        $$Q(S, A) \leftarrow Q(S, A) + \alpha [ R + \gamma \max_{a'} Q(S', a') - Q(S, A) ]$$ 
+    </div>
+
+    <p><strong>詳細程式碼：Q-Learning 更新 (qlearning_agent.py)</strong></p>
+<pre><code class="language-python">    def update(self, state, action, reward, next_state, next_legal_actions, done):
+        state_key = self.get_state_key(state)
+        current_q = self.Q[(state_key, action)]
+
+        if done:
+            td_target = reward
+        else:
+            max_next_q = self.get_max_q_value(next_state, next_legal_actions)
+            td_target = reward + self.gamma * max_next_q
+
+        td_error = td_target - current_q
+        self.Q[(state_key, action)] += self.alpha * td_error</code></pre>
+
+    <h2>4. 訓練流程</h2>
+    <p>本專題總共進行了 <strong>100,000 場 (Episodes)</strong> 的訓練，分為兩個階段。</p>
+
+        <div class="img-container">
+
+            <img src="flow_chart.png" alt="訓練流程圖" style="max-width: 50%;">
+
+            <p><em>圖 4-1：強化學習訓練流程圖</em></p>
+
+        </div>
+
+    
+
+        <h3>4.1 第一階段：基礎訓練 (0 <span class="tilde">&sim;</span> 20,000 場)</h3>
+
+        <p>目的：快速讓 AI 學會「連成一線」的獲勝方式與基本遊戲規則。</p>
+
+    
+
+        <p><strong>詳細程式碼：隨機對弈訓練循環 (training/train.py)</strong></p>
+
+    <pre><code class="language-python">    def train(self, agent, opponent, num_episodes=20000):
+
+            for episode in range(num_episodes):
+
+                state = self.env.reset()
+
+                done = False
+
+                while not done:
+
+                    if self.env.current_player == 1: # AI
+
+                        action = agent.choose_action(state, legal_actions)
+
+                        next_state, reward, done, info = self.env.step(action)
+
+                        if not done: # 對手回合
+
+                            opp_action = opponent.choose_action(opp_legal)
+
+                            next_state, _, done, info = self.env.step(opp_action)
+
+                            if done and info['winner'] == -1: reward = -1.0
+
+                        agent.update(state, action, reward, next_state, next_legal, done)
+
+                        state = next_state</code></pre>
+
+    
+
+        <h3>4.2 第二階段：進階訓練 (20,000 <span class="tilde">&sim;</span> 100,000 場)</h3>
+
+        <p>目的：學習防守。當對手變強（變回自己），若不阻擋對方的連線就會輸掉，這強迫 AI 修補策略漏洞。</p>
+
+    
+
+        <p><strong>詳細程式碼：自我對弈編排 (training/train.py)</strong></p>
+
+    <pre><code class="language-python">def train_agent(agent_class, num_episodes=100000):
+
+        # 階段 1：隨機對弈 (20%)
+
+        trainer.train(agent, RandomPlayer(), int(num_episodes * 0.2))
+
+    
+
+        # 階段 2：自我對弈 (80%)
+
+        agent.epsilon = 0.6 
+
+        trainer.train_self_play(agent, int(num_episodes * 0.8))</code></pre>
+
+    
+
+            <h2>5. 實驗結果與圖表分析</h2>
+
+    
+
+            <p>訓練過程中的數據記錄如下：</p>
+
+    
+
+            <div class="img-container">
+
+    
+
+                <img src="output/td0_learning_curves.png" alt="學習曲線" style="max-width: 90%;">
+
+    
+
+            </div>
+
+    
+
+        
+
+    
+
+                <h3>5.1 累積獎勵 (Cumulative Reward - 左上圖)</h3>
+
+    
+
+        
+
+    
+
+                <ul>
+
+    
+
+        
+
+    
+
+                    <li><strong>階段一</strong>：曲線接近 <strong>1.0</strong>，代表 AI 能輕易贏過隨機對手。</li>
+
+    
+
+        
+
+    
+
+                    <li><strong>階段二</strong>：曲線掉到 <strong>0.0</strong> 附近。這並非退步，而是因為兩個強大的 AI 互不相讓，最後幾乎都以<strong>平手</strong>收場，這是達到最優策略的象徵。</li>
+
+    
+
+        
+
+    
+
+                </ul>
+
+    
+
+        
+
+    
+
+            
+
+    
+
+        
+
+    
+
+                <h3>5.2 勝率變化 (Win Rate - 右上圖)</h3>
+
+    
+
+        
+
+    
+
+                <ul>
+
+    
+
+        
+
+    
+
+                    <li>進入自我對弈階段後，勝率下降且<strong>平手率大幅上升</strong>。這符合井字棋在最優對策下必為和局的理論。</li>
+
+    
+
+        
+
+    
+
+                </ul>
+
+    
+
+        
+
+    
+
+            
+
+    
+
+        
+
+    
+
+                <h3>5.3 每局步數 (Episode Length - 左下圖)</h3>
+
+    
+
+        
+
+    
+
+                <ul>
+
+    
+
+        
+
+    
+
+                    <li>訓練初期步數較少（隨機亂下很快分出勝負）。</li>
+
+    
+
+        
+
+    
+
+                    <li>進入自我對弈階段後，步數顯著增加並穩定在 <strong>9 步</strong>（填滿棋盤），顯示雙方都能成功防守直到平局。</li>
+
+    
+
+        
+
+    
+
+                </ul>
+
+    
+
+        
+
+    
+
+            
+
+    
+
+        
+
+    
+
+                <h3>5.4 探索率變化 (Epsilon Decay - 右下圖)</h3>
+
+    
+
+        
+
+    
+
+                <ul>
+
+    
+
+        
+
+    
+
+                    <li>顯示 $\epsilon$ 值隨著訓練回合數的指數衰減過程。</li>
+
+    
+
+        
+
+    
+
+                    <li>在第 20,000 回合（階段二開始）時有一次<strong>重置</strong>（跳回 0.6），這是為了讓 AI 在面對新對手（自己）時能重新探索策略。</li>
+
+    
+
+        
+
+    
+
+                </ul>
+
+    
+
+        
+
+    
+
+            
+
+    
+
+        
+
+    
+
+                <h3>5.5 最終評估</h3>
+
+    
+
+        
+
+    
+
+                <p>訓練結束後，讓 AI 與隨機對手進行 1000 場測試，結果如下：</p>
+
+    
+
+        
+
+    
+
+            
+
+    
+
+            <ul>
+
+    
+
+                <li><strong>勝率</strong>：96.9%</li>
+
+    
+
+                <li><strong>敗率</strong>：0.6%</li>
+
+    
+
+                <li><strong>平手率</strong>：2.5%</li>
+
+    
+
+            </ul>
+
+    
+
+        
+
+    
+
+            <h2>6. 結論</h2>
+
+    
+
+            <p>透過這次專題，驗證了：</p>
+
+    
+
+            <ol>
+
+    
+
+                <li><strong>Q-Learning 有效</strong>：AI 成功將盤面狀態映射到最佳動作。</li>
+
+    
+
+                <li><strong>自我對弈是關鍵</strong>：單靠隨機對手訓練無法讓 AI 學會防守，自我對弈是提升強度的關鍵。</li>
+
+    
+
+                <li><strong>訓練成果</strong>：最終訓練出的 AI 能夠穩定擊敗弱對手，並在面對強大對手（包括人類玩家）時保持高度的不敗率。</li>
+
+    
+
+            </ol>
+
+    
+
+        
+
+    
+
+                <h2>7. 專案存取與使用說明</h2>
+
+    
+
+        
+
+    
+
+                <p>本專題之所有程式碼有上傳到 GitHub，可以在此網址查看：<br>
+
+    
+
+        
+
+    
+
+                <strong>https://github.com/Jhin-Hsing/TicTacToe-QLearning.git</strong></p>
+
+    
+
+        
+
+    
+
+            
+
+    
+
+        
+
+    
+
+                        <h3>7.1 專案檔案結構</h3>
+
+    
+
+        
+
+    
+
+            
+
+    
+
+        
+
+    
+
+                        <p>本專案採模組化設計，主要檔案結構如下：</p>
+
+    
+
+        
+
+    
+
+            
+
+    
+
+        
+
+    
+
+                    <pre style="line-height: 1.1 !important; font-size: 13px !important; padding: 8px !important; margin: 10px 0 !important; font-family: Consolas, monospace !important; background-color: #f6f8fa !important; border: 1px solid #ddd !important; display: block !important; white-space: pre !important;">TicTacToe-QLearning/&#10;├── main.py&#10;├── play_game.py&#10;├── environment/&#10;│   └── tictactoe.py&#10;├── agents/&#10;│   └── qlearning_agent.py&#10;├── training/&#10;│   └── train.py&#10;├── models/&#10;├── output/&#10;└── dist/&#10;    └── TicTacToe_AI.exe</pre>
+
+    
+
+        
+
+    
+
+            
+
+    
+
+        
+
+    
+
+                    
+
+    
+
+        
+
+    
+
+            
+
+    
+
+        
+
+    
+
+                    
+
+    
+
+        
+
+    
+
+            
+
+    
+
+        
+
+    
+
+                
+
+    
+
+        
+
+    
+
+            
+
+    
+
+        
+
+    
+
+                <h3>7.2 環境準備</h3>
+
+    
+
+        
+
+    
+
+            
+
+    
+
+            <p>確保已安裝 Python 3.10+，並安裝必要套件：</p>
+
+    
+
+        <pre><code class="language-bash">pip install -r requirements.txt</code></pre>
+
+    
+
+            <p><em>註：若僅執行 <code>dist/TicTacToe_AI.exe</code> 則不須安裝任何環境。</em></p>
+
+    
+
+        
+
+    
+
+            <h3>7.2 執行遊戲</h3>
+
+    
+
+            <ul>
+
+    
+
+                <li><strong>直接執行 (推薦)</strong>：雙擊 <code>dist/TicTacToe_AI.exe</code> 即可開始與 AI 對戰。</li>
+
+    
+
+                <li><strong>腳本執行</strong>：於終端機輸入 <code>python play_game.py</code>。</li>
+
+    
+
+            </ul>
+
+    
+
+        
+
+    
+
+            <h3>7.3 訓練 AI (可選)</h3>
+
+    
+
+            <p>若欲從零開始訓練模型，請於終端機輸入：</p>
+
+    
+
+        <pre><code class="language-bash">python main.py --mode train --episodes 100000</code></pre>
+
+    
+
+            <p>訓練完成後，新的模型將自動覆蓋 <code>models/td0_agent.pkl</code> 並同步更新分析圖表。</p>
+
+    
+
+        
+
+</body>
+</html>
